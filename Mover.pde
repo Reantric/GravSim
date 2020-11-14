@@ -1,190 +1,249 @@
-DecimalFormat df = new DecimalFormat("#.#");
-DecimalFormat tf = new DecimalFormat("#.###");
+import java.util.*;
 
-class Mover { // change to Mover later
-  PImage vel;
-  PImage acc;
-  PImage impact;
-  PVector position = new PVector(random(-400,400),random(-400,400));
-  PVector velocity = new PVector(0,0);
-  PVector friction = new PVector(0,0);
-  List<PVector> points = new ArrayList<PVector>();
-  List<PVector> velocities = new ArrayList<PVector>();
-  List<PVector> accelerations = new ArrayList<PVector>();
-  
-  boolean showPositionGraph = true;
-  boolean showVelocityGraph;
-  boolean showAccelerationGraph;
-  int hexCode;
-  /** impact **/
-  int count = -200;
-  float impactX = 0;
-  float impactY = 0;
-   /** impact **/
-  float siz;
-  float ang = position.heading();
+public class Mover implements Comparable<Mover>{
+    LinkedList<PVector> bruh = new LinkedList();
+    PVector pos, vel = new PVector(), acc = new PVector(0,0.01f), force, textPos = new PVector();
+    System system;
+    int maxPoints = 10400;
+    boolean dpg = true, dpi, addp, drawArrow, observer, applyForce = true;
+    float mass = 1;
+    float r = 300;
+    float col = random(0,255);
+    float inc = 0;
+    private PGraphics c;
+    
+    public Mover(System c, float r, float mass){
+        pos = new PVector(random(-width/2,width/2),random(-height/2,height/2));
+        //vel = new PVector(random(-2,2),random(-2,2)).mult(s.deltatime);
+        system = c;
+        this.c = system.canvas;
+        this.c.smooth(8);
+        this.r = r;
+        this.mass = mass;
+        system.allMovers.add(this);
+    }
+    
+    public Mover setPos(float x, float y){
+      pos.x = x;
+      pos.y = y;
+      return this;
+    }
+    
+    public Mover setVel(float x, float y){
+      vel.x = x;
+      vel.y = y;
+      return this;
+    }
+    
+    public Mover setAcc(float x, float y){
+     acc.x = x;
+     acc.y = y;
+      return this;
+    }
+    
+    boolean setVelVec = true;
+    float dist = 0;
+    float angle = 0;
+    public void observerVelVec(){
+      if (!setVelVec){
+        dist = dist(pos.x,pos.y,mouseX-width/2,mouseY-height/2);
+        c.stroke(map(dist,0,dist(pos.x,pos.y,pos.x + width/2,pos.y + height/2),98,255),255,255,180);
+        c.strokeWeight(5);
+        c.pushMatrix();
+        c.translate(pos.x,pos.y);
+        angle = atan2(mouseY-height/2 - pos.y,mouseX-width/2 - pos.x);
+        s.arrow(0,0,2*r*cos(angle),2*r*sin(angle));
+        c.popMatrix();
+      }
+        
+    }
+    
+    public void applyForce(PVector force){
+      acc = PVector.div(force,mass);
+      this.force = force;
+    }
+    
+    public void edges(){
+      textPos.y = pos.y - r/2;
+      textPos.x = pos.x;
       
-  public Mover(float si,float initV, int hex){
-    siz = si;
-    velocity.set(initV*cos(ang),initV*sin(ang));
-    vel = images.get("vel");
-    acc = images.get("acc");
-    hexCode = hex;
-    impact = images.get("impact");
-    impact.resize(100,100);
-    println(vel);
-    print(degrees(ang));
+      if (textPos.y < 50-height/2){
+        textPos.y += ((50-height/2) - textPos.y);
+      }
+      
+      if (textPos.x < 63-width/2){
+        textPos.x += ((63-width/2) - textPos.x);
+      }
+      
+      if (textPos.x > width/2-63){
+        textPos.x += ((width/2 - 63) - textPos.x);
+      }
+      
+      if (pos.y > height/2){
+        pos.y = height/2;
+        vel.y *= -1;
+      }
+      
+      if (pos.y < -height/2){
+        pos.y = -height/2;
+        vel.y *= -0.99;
+      }
+      
+      if (pos.x < -width/2){
+        pos.x = -width/2;
+        vel.x *= -0.99;
+      }
+      
+      if (pos.x > width/2){
+        pos.x = width/2;
+        vel.x *= -1;
+      }
+    }
     
-  }
-  
-  public void setVelocity(float v){
-    velocity.set(v*cos(ang),v*sin(ang));
-  }
-  
-  public void setJerk(float j){ // might change later
-    //jerk.set(j*cos(acceleration.heading()),j*sin(acceleration.heading()));
-    jerk.set(0,j);
-  }
-  
-  public void setAcceleration(float a){ // might change later when i add Newtons law of univ gravitation
-   // acceleration.set(a*cos(velocity.heading()),a*sin(velocity.heading()));
-   acceleration.set(0,a); 
-  }
-  
-  public void friction(float coefficient){
-     friction.x = -coefficient*velocity.x;
-      //println("1: " + velocities.get(velocities.size()-2).x + " 2: " + velocities.get(velocities.size()-1).x);
-  }
-  
-  public void loseEnergy(float coefficient){
-    velocity.y *= 1-coefficient;
-  }
-  
-  public void follow(){
-   // if (position.y < height/2 - 10)
-     // translate(-position.x,0);
-     
-  }
-  
-  public void edgeDetection(){ 
-    float edgeSpace = siz/2;
-    if (position.x > width/2-edgeSpace || position.x < edgeSpace-width/2){ //
-      position.x = position.x > width/2-edgeSpace ? width/2-edgeSpace : edgeSpace-width/2;
-      velocity.x *= -1;
+    protected void tick(){
+
+        PVector totalForce = new PVector();
+        ListIterator<Mover> iter = s.allMovers.listIterator();
+        while (iter.hasNext()){
+          Mover m = iter.next();
+          if (m == this || m.observer) continue;
+          if (s.newtonOrColoumb)
+            totalForce.add(PVector.sub(m.pos,pos).setMag(mass*m.mass / (float) Math.pow(pos.dist(m.pos),2)));
+          else
+            totalForce.add(PVector.sub(pos,m.pos).setMag(mass*m.mass / (float) Math.pow(pos.dist(m.pos),2)));
+            
+          if (abs(m.pos.x - pos.x) < r/1.5 && abs(m.pos.y - pos.y) < r/1.5 && !s.removeMovers.contains(this) && !observer){
+            s.removeMovers.add(m);
+            mass += m.mass;
+            r += sqrt(m.r);
+           // println("Boy");
+          }
+            
+        }
+        
+        if (applyForce)
+          applyForce(totalForce);
+        
+        vel.add(PVector.mult(acc,s.deltatime));
+        pos.add(PVector.mult(vel,s.deltatime));
+        edges();
+        observerVelVec();
+        
+        if (addp)
+          addPoint();
+          
+        if (drawArrow){
+          c.stroke(col,observer ? 0 : 255,255);
+          PVector totalFor = acc.copy().setMag(r + 30);
+          s.arrow(pos.x,pos.y,pos.x + totalFor.x,pos.y + totalFor.y);
+        }
+        
+        s.time += s.deltatime;
+        
+    }
+    
+    private void addPoint(){
+              if (bruh.size() > maxPoints)
+          bruh.remove(0);
+          
+        bruh.add(pos.copy());
+    }
+    
+    public void pulsate(){
+      c.noFill();
+c.stroke(col,observer ? 0 : 255,255,255*(1-map2(inc,0,1,0,1,QUADRATIC,EASE_IN)));
+      c.strokeWeight(5);
+      c.circle(pos.x,pos.y,r*(1+inc));
+      inc += s.deltatime*0.015;
+      
+      if (inc > 1)
+        inc = 0;
     }
 
-     else if (position.y < edgeSpace-height/2 || position.y > height/2 - edgeSpace){
-       if (position.y > height/2 - edgeSpace){
-         int squareSize = (int) map2(velocity.mag(),0,velocity.mag() + 40,60,300,8,1);
-         if (squareSize == 0) squareSize = 300;
-         //println(squareSize);
-         impact.resize(squareSize,squareSize);
-         
-         if (points.get(points.size() - 2).y != points.get(points.size() - 1).y){
-           sfile.play();
-           count = frameCount;
-           image(impact,position.x - 40, position.y + 15);
-           impactX = position.x - 40;
-           impactY = position.y + 15;
-         }
-         
-         friction(0.1);
-         loseEnergy(0.1);
-       }
-       
-       position.y = position.y < edgeSpace-height/2 ? edgeSpace-height/2 : height/2-edgeSpace;
-        velocity.y *= -1;
-     } else
-       friction.x = 0;
-  }
-  
-  public void move(){
-    //info();
-           
-    pushMatrix();
-    points.add(position.copy());
-    velocities.add(velocity.copy());
-    accelerations.add(acceleration.copy());
+    public void display(){
+        tick();
+        
+        if (dpg)
+        displayPosGraph();
+        
+        if (dpi)
+        displayInfo();
+        
+        c.textSize(36);
+        c.fill(col,observer ? 0 : 255,255);
+        c.noStroke();
+        if (r != 0){
+          c.circle(pos.x,pos.y,r);
+        }
+        c.fill(0,0,255);
+        if (!observer)
+          c.text(String.format("%.2f",mass),textPos.x,textPos.y);
+    }
     
-    
-    acceleration.add(PVector.mult(jerk,timescale));
-    acceleration.add(friction);
-    velocity.add(PVector.mult(acceleration,timescale));
-    position.add(PVector.mult(velocity,timescale));
-    graph();
-    edgeDetection();
-    popMatrix();
-  //  println(position);
-  
-  if (count + 20 > frameCount)
-    image(impact,impactX, impactY);
-    
-  }
-  
-  
-  public void graph(){
-    strokeWeight(5);
-    
-    if (showPositionGraph){
-      stroke(hexCode);
-      for (int i = 0; i < points.size()-1; i++){
-        line(points.get(i).x,points.get(i).y,points.get(i+1).x,points.get(i+1).y);
+    private void displayPosGraph(){
+     c.strokeWeight(4);
+      ListIterator<PVector> iter = bruh.listIterator();
+      PVector p = null;
+      if (iter.hasNext()){
+        p = iter.next();
+      }
+      while (iter.hasNext()){
+          //canvas.stroke(getColor(iter.nextIndex(), 0, maxPoints),255,255);
+         c.stroke(col,observer ? 0 : 255,255);
+          PVector p2 = iter.next();
+         c.line(p.x,p.y,p2.x,p2.y);
+          p = p2;
       }
     }
     
-    if (showVelocityGraph){
-      stroke(255,255,255);
-      for (int i = 0; i < points.size()-1; i++){
-        line(velocities.get(i).x,velocities.get(i).y,velocities.get(i+1).x,velocities.get(i+1).y);
-      }
+    public void displayPosGraph(boolean display){
+      dpg = display;
     }
     
-    if (showAccelerationGraph){
-      stroke(40,255,255);
-      for (int i = 0; i < points.size()-1; i++){
-        line(accelerations.get(i).x,accelerations.get(i).y,accelerations.get(i+1).x,accelerations.get(i+1).y);
-      }
+    public void displayInfo(boolean display){
+      dpi = display;
     }
     
-    if (points.size() > 75){
-      points.remove(0);
-      velocities.remove(0);
-      accelerations.remove(0);
+    private void displayInfo(){
+     c.textSize(40);
+     c.text("Acceleration: " + String.format("[%.2f,%.2f]",acc.x,-acc.y),100-width/2,100-height/2);
+     c.fill(200,255,255);
+     c.text("Velocity: " + String.format("[%.2f,%.2f]",vel.x,-vel.y),100-width/2,170-height/2);
+     c.fill(140,255,255);
+     c.text("Force: " + String.format("[%.2f,%.2f]",force.x,-force.y),100-width/2,240-height/2);
+     c.fill(200,255,255);
+     c.text("Radius: " + String.format("%.2f m",r),100-width/2,310-height/2);
+     c.fill(80,255,255);
+     c.text("Mass: " + String.format("%.2f kg",mass),100-width/2,380-height/2);
+    // c.text("Acceleration: " + String.format("[%.2f,%.2f]",acc.x,acc.y),100-width/2,100-height/2);
     }
     
-
-  }
-  
-  public void info(){ // Refine later
-    fill(255);
-    textSize(36);
-    text("Position: (" + round(position.x) + " , " + round(-position.y) + ")", width/2 - 380, 40-height/2);
-    text("Velocity: " + round(velocity.mag()), width/2 - 380, 145-height/2);
-    text("Acceleration: " + df.format(acceleration.mag()), width/2 - 380, 245-height/2);
-    text("Timescale: " + tf.format(timescale) + "x",28-width/2, 50-height/2);
-    vel.resize(100,70);
-    acc.resize(100,70);
+    public String toString(){
+      return ""+observer;
+    }
     
-    pushMatrix(); //vel
-    translate(width/2 - 150, 135-height/2);
-    rotate(velocity.heading());
-    image(vel,0,0);
-    popMatrix();
+    public System getSystem(){
+      return s;
+    }
     
-    pushMatrix(); //acc
-    translate(width/2 - 70, 235-height/2); // <---
-    rotate(acceleration.heading());
-    image(acc,0,0);
-    popMatrix();
-    
-  }
-  
-  public void show(){
-    imageMode(CENTER);
-  //  image(images.get("grass"),0,height/2 - 50); For now
-    noStroke();
-    fill(map(velocity.mag(),0,100,0,255),255,255);
-    circle(position.x,position.y,siz);
-    move();
-  }
+    public int compareTo(Mover m2) {
+      return m2.observer ? -1 : 1;
+    }
 }
+
+   
+    public static class Gravity {
+      public static PVector gravityForce(System s,PVector pos, float mass){
+      PVector totalForce = new PVector();
+          ListIterator<Mover> iter = s.allMovers.listIterator();
+        while (iter.hasNext()){
+          Mover m = iter.next();
+          if (m.observer) continue;
+          if (s.newtonOrColoumb)
+            totalForce.add(PVector.sub(m.pos,pos).setMag(mass*m.mass / (float) Math.pow(pos.dist(m.pos),2)));
+          else
+            totalForce.add(PVector.sub(pos,m.pos).setMag(mass*m.mass / (float) Math.pow(pos.dist(m.pos),2)));
+        }
+      return totalForce;
+    }
+    }
